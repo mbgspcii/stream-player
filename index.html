@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <!-- The address of this page holds the URL of the stream: never send it to another site. -->
+        <meta name="referrer" content="no-referrer" />
+        <meta name="robots" content="noindex" />
+        <title>Stream player</title>
+        <style>
+            :root {
+                --bg: #f6f7f9;
+                --panel: #ffffff;
+                --text: #1c2330;
+                --muted: #5d6778;
+                --line: #d9dee6;
+                --accent: #2b5fd9;
+                --accent-text: #ffffff;
+                --ok: #1a7f4b;
+                --error: #b3261e;
+            }
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --bg: #14171c;
+                    --panel: #1d2128;
+                    --text: #e8ebf0;
+                    --muted: #9aa4b5;
+                    --line: #323946;
+                    --accent: #7aa2ff;
+                    --accent-text: #10141b;
+                    --ok: #5fd39a;
+                    --error: #ff8a80;
+                }
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                padding: 24px 16px 48px;
+                background: var(--bg);
+                color: var(--text);
+                font:
+                    15px/1.5 system-ui,
+                    -apple-system,
+                    'Segoe UI',
+                    sans-serif;
+            }
+            main {
+                max-width: 880px;
+                margin: 0 auto;
+            }
+            h1 {
+                margin: 0 0 4px;
+                font-size: 22px;
+            }
+            p.lead {
+                margin: 0 0 20px;
+                color: var(--muted);
+            }
+            form {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+            input[type='url'] {
+                flex: 1 1 320px;
+                min-width: 0;
+                padding: 10px 12px;
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                background: var(--panel);
+                color: var(--text);
+                font: inherit;
+            }
+            select,
+            button {
+                padding: 10px 14px;
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                background: var(--panel);
+                color: var(--text);
+                font: inherit;
+                cursor: pointer;
+            }
+            button.primary {
+                background: var(--accent);
+                border-color: var(--accent);
+                color: var(--accent-text);
+                font-weight: 600;
+            }
+            .row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                flex-wrap: wrap;
+                margin: 16px 0 10px;
+            }
+            .badge {
+                display: inline-block;
+                padding: 3px 10px;
+                border-radius: 999px;
+                border: 1px solid var(--line);
+                background: var(--panel);
+                font-weight: 600;
+                font-size: 13px;
+            }
+            .badge.known {
+                border-color: var(--ok);
+                color: var(--ok);
+            }
+            .badge.unknown {
+                border-color: var(--error);
+                color: var(--error);
+            }
+            .muted {
+                color: var(--muted);
+            }
+            video {
+                display: block;
+                width: 100%;
+                max-height: 70vh;
+                background: #000;
+                border-radius: 10px;
+            }
+            section {
+                margin-top: 18px;
+                padding: 14px 16px;
+                border: 1px solid var(--line);
+                border-radius: 10px;
+                background: var(--panel);
+            }
+            h2 {
+                margin: 0 0 10px;
+                font-size: 15px;
+            }
+            .tracks {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+            .tracks button[aria-pressed='true'] {
+                background: var(--accent);
+                border-color: var(--accent);
+                color: var(--accent-text);
+                font-weight: 600;
+            }
+            .tracks small {
+                opacity: 0.75;
+                margin-left: 4px;
+            }
+            pre {
+                margin: 0;
+                max-height: 200px;
+                overflow: auto;
+                white-space: pre-wrap;
+                word-break: break-word;
+                font:
+                    12.5px/1.5 ui-monospace,
+                    SFMono-Regular,
+                    Menlo,
+                    monospace;
+                color: var(--muted);
+            }
+            pre .error {
+                color: var(--error);
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <h1>Stream player</h1>
+            <p class="lead">Paste the URL of a DASH (<code>.mpd</code>) or HLS (<code>.m3u8</code>) manifest.</p>
+
+            <form id="form">
+                <input
+                    id="url"
+                    type="url"
+                    required
+                    placeholder="https://…/master.mpd or https://…/master.m3u8"
+                    autocomplete="off"
+                    spellcheck="false"
+                />
+                <select id="forced" title="Type of the stream">
+                    <option value="auto">Auto (from the extension)</option>
+                    <option value="dash">DASH</option>
+                    <option value="hls">HLS</option>
+                </select>
+                <button class="primary" type="submit">Load</button>
+            </form>
+
+            <div class="row">
+                <span>Type:</span>
+                <span id="type" class="badge">none</span>
+                <span id="engine" class="muted"></span>
+            </div>
+
+            <video id="video" controls playsinline></video>
+
+            <section>
+                <h2>Subtitles <span id="count" class="muted"></span></h2>
+                <div id="tracks" class="tracks"><span class="muted">Load a stream to see its subtitle tracks.</span></div>
+            </section>
+
+            <section>
+                <h2>Log</h2>
+                <pre id="log"></pre>
+            </section>
+        </main>
+
+        <script
+            src="https://cdn.jsdelivr.net/npm/dashjs@4.7.4/dist/dash.all.min.js"
+            integrity="sha384-fl7i8WZxcPlF9b1503+Gm+izr/2hpilydj0i/DlQTIafROZ1NP4rAWjyl6p3s1ev"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"
+            integrity="sha384-9v3HcdYrO3D+OPDTjZ40RXocgE4GtXVCd3/mCS62JsM93JXgI1afJVuwjFvsu6ni"
+            crossorigin="anonymous"
+        ></script>
+        <script>
+            const video = document.getElementById('video');
+            const form = document.getElementById('form');
+            const urlInput = document.getElementById('url');
+            const forcedSelect = document.getElementById('forced');
+            const typeBadge = document.getElementById('type');
+            const engineLabel = document.getElementById('engine');
+            const tracksBox = document.getElementById('tracks');
+            const countLabel = document.getElementById('count');
+            const logBox = document.getElementById('log');
+
+            /** Stops the player of the previous stream. */
+            let stopCurrentPlayer = () => {};
+
+            const log = (message, isError = false) => {
+                const line = document.createElement('span');
+                line.textContent = `${new Date().toLocaleTimeString()}  ${message}\n`;
+                if (isError) {
+                    line.className = 'error';
+                }
+                logBox.append(line);
+                logBox.scrollTop = logBox.scrollHeight;
+            };
+
+            /** The type of the stream, from the extension of the path. The query string is ignored. */
+            const detectType = (url) => {
+                let path;
+                try {
+                    path = new URL(url).pathname.toLowerCase();
+                } catch {
+                    return undefined;
+                }
+                if (path.endsWith('.mpd')) {
+                    return 'dash';
+                }
+                if (path.endsWith('.m3u8')) {
+                    return 'hls';
+                }
+                return undefined;
+            };
+
+            const showType = (type) => {
+                const names = { dash: 'DASH (.mpd)', hls: 'HLS (.m3u8)' };
+                typeBadge.textContent = names[type] ?? 'unknown';
+                typeBadge.className = `badge ${type ? 'known' : 'unknown'}`;
+            };
+
+            /**
+             * Shows one button per subtitle track, and an "Off" button.
+             * `tracks`: { label, language }[]. `select(index)` gets -1 for "Off".
+             */
+            const showTracks = (tracks, select) => {
+                tracksBox.replaceChildren();
+                countLabel.textContent = `(${tracks.length} track${tracks.length === 1 ? '' : 's'})`;
+
+                if (tracks.length === 0) {
+                    const none = document.createElement('span');
+                    none.className = 'muted';
+                    none.textContent = 'The player found no subtitle track in this stream.';
+                    tracksBox.append(none);
+                    return;
+                }
+
+                const buttons = [];
+                const addButton = (index, label, language) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.textContent = label;
+                    if (language) {
+                        const small = document.createElement('small');
+                        small.textContent = language;
+                        button.append(small);
+                    }
+                    button.setAttribute('aria-pressed', String(index === -1));
+                    button.addEventListener('click', () => {
+                        select(index);
+                        for (const other of buttons) {
+                            other.setAttribute('aria-pressed', String(other === button));
+                        }
+                        log(index === -1 ? 'subtitles off' : `subtitles: ${label} (${language})`);
+                    });
+                    buttons.push(button);
+                    tracksBox.append(button);
+                };
+
+                addButton(-1, 'Off', '');
+                tracks.forEach((track, index) => addButton(index, track.label, track.language));
+            };
+
+            const playDash = (url) => {
+                const player = dashjs.MediaPlayer().create();
+                const events = dashjs.MediaPlayer.events;
+
+                player.on(events.ERROR, (event) => log(`dash.js error: ${JSON.stringify(event.error ?? event)}`, true));
+                player.on(events.STREAM_INITIALIZED, () => log('stream initialized'));
+                player.on(events.TEXT_TRACKS_ADDED, (event) => {
+                    const tracks = (event.tracks ?? []).map((track) => ({
+                        label: track.labels?.[0]?.text ?? track.label ?? track.lang ?? 'unnamed',
+                        language: track.lang ?? '',
+                    }));
+                    log(`dash.js found ${tracks.length} subtitle track(s): ${tracks.map((t) => t.language).join(', ')}`);
+                    showTracks(tracks, (index) => {
+                        player.enableText(index !== -1);
+                        player.setTextTrack(index);
+                    });
+                    // Off until one is chosen, so the chosen button and the screen agree.
+                    player.enableText(false);
+                    player.setTextTrack(-1);
+                });
+
+                player.initialize(video, url, false);
+                engineLabel.textContent = `played with dash.js ${player.getVersion()}`;
+                stopCurrentPlayer = () => player.reset();
+            };
+
+            const playHls = (url) => {
+                if (!Hls.isSupported()) {
+                    // Safari on iPhone: no Media Source Extensions, but HLS is native.
+                    video.src = url;
+                    engineLabel.textContent = 'played natively by the browser';
+                    video.addEventListener(
+                        'loadedmetadata',
+                        () => {
+                            const textTracks = [...video.textTracks];
+                            showTracks(
+                                textTracks.map((track) => ({ label: track.label || track.language, language: track.language })),
+                                (index) => textTracks.forEach((track, i) => (track.mode = i === index ? 'showing' : 'disabled'))
+                            );
+                        },
+                        { once: true }
+                    );
+                    stopCurrentPlayer = () => {
+                        video.removeAttribute('src');
+                        video.load();
+                    };
+                    return;
+                }
+
+                const hls = new Hls();
+
+                hls.on(Hls.Events.ERROR, (_event, data) =>
+                    log(`hls.js error: ${data.type} / ${data.details}${data.fatal ? ' (fatal)' : ''}`, true)
+                );
+                hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => log(`manifest parsed: ${data.levels.length} rendition(s)`));
+                hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_event, data) => {
+                    const tracks = data.subtitleTracks.map((track) => ({
+                        label: track.name ?? track.lang ?? 'unnamed',
+                        language: track.lang ?? '',
+                    }));
+                    log(`hls.js found ${tracks.length} subtitle track(s): ${tracks.map((t) => t.language).join(', ')}`);
+                    showTracks(tracks, (index) => {
+                        hls.subtitleDisplay = index !== -1;
+                        hls.subtitleTrack = index;
+                    });
+                    hls.subtitleTrack = -1;
+                });
+
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                engineLabel.textContent = `played with hls.js ${Hls.version}`;
+                stopCurrentPlayer = () => hls.destroy();
+            };
+
+            const load = (url) => {
+                stopCurrentPlayer();
+                stopCurrentPlayer = () => {};
+                tracksBox.replaceChildren();
+                countLabel.textContent = '';
+                engineLabel.textContent = '';
+
+                const type = forcedSelect.value === 'auto' ? detectType(url) : forcedSelect.value;
+                showType(type);
+                log(`loading ${url}`);
+
+                if (type === undefined) {
+                    log('unknown type: the path ends with neither .mpd nor .m3u8. Choose the type in the list.', true);
+                    return;
+                }
+
+                // No subtitle track event means no track: show it rather than an empty box.
+                showTracks([], () => {});
+
+                try {
+                    if (type === 'dash') {
+                        playDash(url);
+                    } else {
+                        playHls(url);
+                    }
+                } catch (error) {
+                    log(`the player did not start: ${error.message}`, true);
+                }
+            };
+
+            // The type is shown while typing, before the stream is loaded.
+            urlInput.addEventListener('input', () => {
+                if (forcedSelect.value === 'auto') {
+                    showType(urlInput.value ? detectType(urlInput.value) : undefined);
+                }
+            });
+
+            form.addEventListener('submit', (event) => {
+                event.preventDefault();
+                const url = urlInput.value.trim();
+                // The URL goes in the address bar, so the page can be reloaded or shared with its stream.
+                history.replaceState(null, '', `?url=${encodeURIComponent(url)}`);
+                load(url);
+            });
+
+            const initialUrl = new URLSearchParams(location.search).get('url');
+            if (initialUrl) {
+                urlInput.value = initialUrl;
+                load(initialUrl);
+            }
+        </script>
+    </body>
+</html>

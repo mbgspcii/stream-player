@@ -1,0 +1,12 @@
+# A static page: nothing to build, the repository root is the site.
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # The address of the page holds the URL of the stream: never send it to another site.
+    Referrer-Policy = "no-referrer"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    X-Robots-Tag = "noindex"
