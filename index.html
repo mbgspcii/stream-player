@@ -149,6 +149,29 @@
                 opacity: 0.75;
                 margin-left: 4px;
             }
+            ul.renditions {
+                margin: 0;
+                padding: 0;
+                list-style: none;
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+            ul.renditions li {
+                padding: 6px 12px;
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                font-variant-numeric: tabular-nums;
+            }
+            ul.renditions li small {
+                opacity: 0.75;
+                margin-left: 6px;
+            }
+            ul.renditions li[aria-current='true'] {
+                border-color: var(--ok);
+                color: var(--ok);
+                font-weight: 600;
+            }
             pre {
                 margin: 0;
                 max-height: 200px;
@@ -198,6 +221,13 @@
             <video id="video" controls playsinline></video>
 
             <section>
+                <h2>Renditions <span id="renditionCount" class="muted"></span></h2>
+                <ul id="renditions" class="renditions">
+                    <li class="muted">Load a stream to see the renditions of its manifest.</li>
+                </ul>
+            </section>
+
+            <section>
                 <h2>Subtitles <span id="count" class="muted"></span></h2>
                 <div id="tracks" class="tracks"><span class="muted">Load a stream to see its subtitle tracks.</span></div>
             </section>
@@ -227,6 +257,8 @@
             const engineLabel = document.getElementById('engine');
             const tracksBox = document.getElementById('tracks');
             const countLabel = document.getElementById('count');
+            const renditionsList = document.getElementById('renditions');
+            const renditionCountLabel = document.getElementById('renditionCount');
             const logBox = document.getElementById('log');
 
             /** Stops the player of the previous stream. */
@@ -307,12 +339,67 @@
                 tracks.forEach((track, index) => addButton(index, track.label, track.language));
             };
 
+            /** `1500000` gives `1500 kb/s`. */
+            const formatBitrate = (bitsPerSecond) => `${Math.round(bitsPerSecond / 1000)} kb/s`;
+
+            const formatResolution = ({ width, height }) => (width && height ? `${width}x${height}` : 'no resolution');
+
+            /**
+             * Shows the renditions that the manifest lists, and writes them in the log.
+             * `renditions`: { width, height, bitrate }[], in the order of the player.
+             * A listed rendition is not checked: its segments may be missing.
+             */
+            const showRenditions = (renditions) => {
+                renditionsList.replaceChildren();
+                renditionCountLabel.textContent = `(${renditions.length})`;
+
+                if (renditions.length === 0) {
+                    const none = document.createElement('li');
+                    none.className = 'muted';
+                    none.textContent = 'The player found no video rendition in this stream.';
+                    renditionsList.append(none);
+                    return;
+                }
+
+                for (const rendition of renditions) {
+                    const item = document.createElement('li');
+                    const bitrate = document.createElement('small');
+                    item.textContent = formatResolution(rendition);
+                    bitrate.textContent = formatBitrate(rendition.bitrate);
+                    item.append(bitrate);
+                    renditionsList.append(item);
+                }
+
+                log(
+                    `${renditions.length} rendition(s): ${renditions
+                        .map((rendition) => `${formatResolution(rendition)} (${formatBitrate(rendition.bitrate)})`)
+                        .join(', ')}`
+                );
+            };
+
+            /** Marks the rendition that the player is playing. `index` is its place in the list shown. */
+            const showPlayingRendition = (index) => {
+                [...renditionsList.children].forEach((item, i) => item.setAttribute('aria-current', String(i === index)));
+                const playing = renditionsList.children[index];
+                if (playing) {
+                    log(`playing ${playing.firstChild.textContent}`);
+                }
+            };
+
             const playDash = (url) => {
                 const player = dashjs.MediaPlayer().create();
                 const events = dashjs.MediaPlayer.events;
 
                 player.on(events.ERROR, (event) => log(`dash.js error: ${JSON.stringify(event.error ?? event)}`, true));
-                player.on(events.STREAM_INITIALIZED, () => log('stream initialized'));
+                player.on(events.STREAM_INITIALIZED, () => {
+                    log('stream initialized');
+                    showRenditions(player.getBitrateInfoListFor('video') ?? []);
+                });
+                player.on(events.QUALITY_CHANGE_RENDERED, (event) => {
+                    if (event.mediaType === 'video') {
+                        showPlayingRendition(event.newQuality);
+                    }
+                });
                 player.on(events.TEXT_TRACKS_ADDED, (event) => {
                     const tracks = (event.tracks ?? []).map((track) => ({
                         label: track.labels?.[0]?.text ?? track.label ?? track.lang ?? 'unnamed',
@@ -361,7 +448,8 @@
                 hls.on(Hls.Events.ERROR, (_event, data) =>
                     log(`hls.js error: ${data.type} / ${data.details}${data.fatal ? ' (fatal)' : ''}`, true)
                 );
-                hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => log(`manifest parsed: ${data.levels.length} rendition(s)`));
+                hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => showRenditions(data.levels));
+                hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => showPlayingRendition(data.level));
                 hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_event, data) => {
                     const tracks = data.subtitleTracks.map((track) => ({
                         label: track.name ?? track.lang ?? 'unnamed',
@@ -386,6 +474,8 @@
                 stopCurrentPlayer = () => {};
                 tracksBox.replaceChildren();
                 countLabel.textContent = '';
+                renditionsList.replaceChildren();
+                renditionCountLabel.textContent = '';
                 engineLabel.textContent = '';
 
                 const type = forcedSelect.value === 'auto' ? detectType(url) : forcedSelect.value;

@@ -6,8 +6,11 @@ Paste the URL of a manifest and press **Load**:
 
 - the page shows the type of the stream, from the extension of the URL: DASH (`.mpd`) or HLS (`.m3u8`);
 - it plays the stream with [dash.js](https://github.com/Dash-Industry-Forum/dash.js) or [hls.js](https://github.com/video-dev/hls.js);
+- it lists the renditions of the manifest (resolution and bitrate), and marks the one being played;
 - it lists the subtitle tracks that the player found, with one button per track;
-- the log shows the tracks found and the errors of the player.
+- the log shows the renditions, the tracks found and the errors of the player.
+
+A listed rendition is what the manifest announces. The page does not check that its segments exist.
 
 The loaded URL goes in the address of the page (`?url=…`), so the page can be reloaded or shared with its stream.
 
