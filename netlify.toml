@@ -1,6 +1,7 @@
-# A static page: nothing to build, the repository root is the site.
+# Netlify builds the site with Vite, then serves the `dist` folder.
 [build]
-  publish = "."
+  command = "npm run build"
+  publish = "dist"
 
 [[headers]]
   for = "/*"

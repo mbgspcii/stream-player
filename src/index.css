@@ -1,0 +1,45 @@
+@import 'tailwindcss';
+
+/* The colors of the page. The dark ones are used when the system asks for a dark theme. */
+:root {
+    color-scheme: light dark;
+    --page: #f6f7f9;
+    --panel: #ffffff;
+    --ink: #1c2330;
+    --muted: #5d6778;
+    --line: #d9dee6;
+    --accent: #2b5fd9;
+    --on-accent: #ffffff;
+    --ok: #1a7f4b;
+    --warning: #9a5b00;
+    --error: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --page: #14171c;
+        --panel: #1d2128;
+        --ink: #e8ebf0;
+        --muted: #9aa4b5;
+        --line: #323946;
+        --accent: #7aa2ff;
+        --on-accent: #10141b;
+        --ok: #5fd39a;
+        --warning: #f2b84b;
+        --error: #ff8a80;
+    }
+}
+
+/* Gives the colors as classes: `bg-page`, `text-muted`, `border-line`… */
+@theme inline {
+    --color-page: var(--page);
+    --color-panel: var(--panel);
+    --color-ink: var(--ink);
+    --color-muted: var(--muted);
+    --color-line: var(--line);
+    --color-accent: var(--accent);
+    --color-on-accent: var(--on-accent);
+    --color-ok: var(--ok);
+    --color-warning: var(--warning);
+    --color-error: var(--error);
+}
